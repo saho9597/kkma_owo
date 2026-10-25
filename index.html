@@ -1020,10 +1020,10 @@ button{font:inherit;color:inherit;cursor:pointer}
     if (!body || u.sending || !ibReady(b)) return;
     u.sending = true; u.note = ''; render();
     try {
-      var res = await sbRpc(b, 'qbox_ask', {p_kind: kind, p_body: body, p_nick: (u.nick || '').trim() || null, p_private: kind === 'letter' ? true : !!u.priv});
+      var res = await sbRpc(b, 'qbox_ask', {p_kind: kind, p_body: body, p_nick: (u.nick || '').trim() || null, p_private: !!u.priv});
       var row = Array.isArray(res) ? res[0] : res;
       if (row && row.token){ var a = myToks(b); a.push({id: row.id, token: row.token}); saveToks(b, a); }
-      u.note = kind === 'letter' ? '편지를 보냈어요. 주인만 읽을 수 있어요.' : (u.priv ? '비공개 질문을 보냈어요. 답변은 이 기기에서만 보여요.' : '질문을 보냈어요. 답변이 달리면 여기에 공개돼요.');
+      u.note = kind === 'letter' ? (u.priv ? '비공개로 남겼어요. 주인만 읽을 수 있어요.' : '방명록에 남겼어요.') : (u.priv ? '비공개 질문을 보냈어요. 답변은 이 기기에서만 보여요.' : '질문을 보냈어요. 답변이 달리면 여기에 공개돼요.');
       u.draft = ''; u.sending = false; await ibLoad(b, true);
     } catch(e){ u.sending = false; u.note = e.message; render(); }
   }
@@ -1058,7 +1058,7 @@ button{font:inherit;color:inherit;cursor:pointer}
         side === 'in' ? av('mav') : null,
         h('div', {class: 'bcol'}, opt.nick ? h('span', {class: 'bnick', text: opt.nick}) : null, h('div', {class: 'bb'}, rich(text)), opt.meta ? h('div', {class: 'bmeta'}, opt.meta) : null));
     }
-    log.append(msg('in', u.tab === 'qna' ? (b.intro || '궁금한 걸 편하게 물어보세요. 답변한 질문은 여기에 공개돼요.') : (b.lintro || '하고 싶은 말을 익명으로 남겨주세요. 편지는 저만 읽을 수 있어요.')));
+    log.append(msg('in', u.tab === 'qna' ? (b.intro || '궁금한 걸 편하게 물어보세요. 답변한 질문은 여기에 공개돼요.') : (b.lintro || '하고 싶은 말을 익명으로 남겨주세요. 모두가 볼 수 있어요. 비공개로 남기면 저만 읽어요.')));
     if (!ready) log.append(h('div', {class: 'ph-sys', text: keyDanger(b.key) ? '비밀 키(secret/service_role)가 들어가 있어요. publishable 키로 바꿔주세요.' : (canEdit ? '편집에서 메시지 서버(Supabase) 주소와 키를 넣으면 열려요.' : '메시지 창을 준비하고 있어요.')}));
     else if (u.loading && !u.loaded) log.append(h('div', {class: 'ph-sys', text: '메시지를 불러오는 중…'}));
     else if (u.err) log.append(h('div', {class: 'ph-sys err', text: u.err}));
@@ -1066,38 +1066,39 @@ button{font:inherit;color:inherit;cursor:pointer}
       var mineIds = {}, rows = [];
       u.mine.forEach(function(m){ mineIds[m.id] = 1; });
       if (u.tab === 'qna'){
-        u.pub.forEach(function(q){ if (!mineIds[q.id]) rows.push({q: q, mine: false, t: q.answered_at || q.created_at}); });
+        u.pub.forEach(function(q){ if (!mineIds[q.id] && (q.kind || 'qna') === 'qna') rows.push({q: q, mine: false, t: q.answered_at || q.created_at}); });
         u.mine.forEach(function(m){ if (m.kind === 'qna') rows.push({q: m, mine: true, t: m.created_at}); });
       } else {
+        u.pub.forEach(function(q){ if (!mineIds[q.id] && q.kind === 'letter') rows.push({q: q, mine: false, t: q.created_at}); });
         u.mine.forEach(function(m){ if (m.kind === 'letter') rows.push({q: m, mine: true, t: m.created_at}); });
       }
       rows.sort(function(a, c){ return a.t < c.t ? -1 : 1; });
-      if (!rows.length) log.append(h('div', {class: 'ph-sys', text: u.tab === 'qna' ? '아직 공개된 답변이 없어요. 첫 질문을 보내보세요.' : '보낸 편지와 답장은 이 기기에서만 다시 볼 수 있어요.'}));
+      if (!rows.length) log.append(h('div', {class: 'ph-sys', text: u.tab === 'qna' ? '아직 공개된 답변이 없어요. 첫 질문을 보내보세요.' : '아직 남겨진 글이 없어요. 첫 글을 남겨보세요.'}));
       rows.forEach(function(r){
         var q = r.q; dayChip(r.t);
         var meta = [h('span', {text: hm(new Date(q.created_at))})];
         if (r.mine){
           meta.unshift(h('span', {text: '내가 보냄'}));
-          if (q.kind === 'letter' || q.is_private) meta.push(h('span', {class: 'lock', text: '■ 비공개'}));
-          if (!q.answer) meta.push(h('span', {text: q.kind === 'letter' ? '전달됨' : '답변 기다리는 중'}));
+          if (q.is_private) meta.push(h('span', {class: 'lock', text: '■ 비공개'}));
+          if (!q.answer && q.kind !== 'letter') meta.push(h('span', {text: '답변 기다리는 중'}));
           meta.push(armedLink('지우기', '정말 지울까요?', function(){ ibDel(b, q.id); }));
         }
-        log.append(msg('out', q.body, {cls: [r.mine ? 'mine' : '', q.kind === 'letter' ? 'letter' : '', r.mine && !q.answer ? 'pending' : ''].join(' ').trim(), nick: q.nick || (r.mine ? '' : '익명'), meta: meta}));
-        if (q.answer) log.append(msg('in', q.answer, {cls: q.kind === 'letter' ? 'letter' : '', meta: [h('span', {text: q.answered_at ? hm(new Date(q.answered_at)) : ''}), r.mine && (q.is_private || q.kind === 'letter') ? h('span', {class: 'lock', text: '나에게만 보이는 답장'}) : null]}));
+        log.append(msg('out', q.body, {cls: [r.mine ? 'mine' : '', q.kind === 'letter' ? 'letter' : '', r.mine && !q.answer && q.kind !== 'letter' ? 'pending' : ''].join(' ').trim(), nick: q.nick || (r.mine ? '' : '익명'), meta: meta}));
+        if (q.answer) log.append(msg('in', q.answer, {cls: q.kind === 'letter' ? 'letter' : '', meta: [h('span', {text: q.answered_at ? hm(new Date(q.answered_at)) : ''}), r.mine && q.is_private ? h('span', {class: 'lock', text: '나에게만 보이는 답장'}) : null]}));
       });
     }
     if (u.note) log.append(h('div', {class: 'ph-sys', text: u.note}));
     var cnt = h('div', {class: 'ph-count', text: (u.draft || '').length + ' / 1000'});
     var send = h('button', {class: 'ph-send', type: 'submit', 'aria-label': '보내기', disabled: !(u.draft || '').trim() || u.sending || !ready}); send.innerHTML = SEND;
-    var ta = h('textarea', {id: b.id + '-ta', rows: 1, maxlength: '1000', value: u.draft || '', disabled: !ready, placeholder: u.tab === 'qna' ? '질문을 입력하세요' : '편지를 써주세요', 'aria-label': '메시지 입력',
+    var ta = h('textarea', {id: b.id + '-ta', rows: 1, maxlength: '1000', value: u.draft || '', disabled: !ready, placeholder: u.tab === 'qna' ? '질문을 입력하세요' : '방명록을 남겨주세요', 'aria-label': '메시지 입력',
       oninput: function(e){ u.draft = e.target.value; e.target.style.height = 'auto'; e.target.style.height = Math.min(120, e.target.scrollHeight) + 'px'; cnt.textContent = u.draft.length + ' / 1000'; send.disabled = !u.draft.trim() || u.sending; },
       onkeydown: function(e){ if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); ibSend(b, u.tab); } }});
     var form = h('form', {class: 'ph-comp', onsubmit: function(e){ e.preventDefault(); ibSend(b, u.tab); }},
       h('div', {class: 'ph-opts'},
         h('input', {type: 'text', id: b.id + '-nick', maxlength: '20', value: u.nick || '', placeholder: '닉네임 (안 써도 돼요)', 'aria-label': '닉네임', oninput: function(e){ u.nick = e.target.value; }}),
-        u.tab === 'qna' ? h('label', {class: 'ph-lock'}, h('input', {type: 'checkbox', id: b.id + '-priv', checked: !!u.priv, onchange: function(e){ u.priv = e.target.checked; }}), '비공개로 보내기') : h('span', {class: 'ph-lock', text: '■ 주인만 읽어요'})),
+        h('label', {class: 'ph-lock'}, h('input', {type: 'checkbox', id: b.id + '-priv', checked: !!u.priv, onchange: function(e){ u.priv = e.target.checked; }}), u.tab === 'qna' ? '비공개로 보내기' : '비공개 (주인만)')),
       h('div', {class: 'ph-row'}, ta, send), cnt);
-    var tabs = (hasQ && hasL) ? h('div', {class: 'ph-tabs', role: 'tablist'}, [['qna', b.qtitle || '질문함'], ['letter', b.ltitle || '익명 편지']].map(function(t){
+    var tabs = (hasQ && hasL) ? h('div', {class: 'ph-tabs', role: 'tablist'}, [['qna', b.qtitle || '질문함'], ['letter', b.ltitle || '익명 방명록']].map(function(t){
       return h('button', {type: 'button', role: 'tab', 'aria-selected': String(u.tab === t[0]), onclick: function(){ u.tab = t[0]; u.note = ''; u.scroll = true; render(); }}, t[1]);
     })) : null;
     var phone = h('div', {class: 'phone'}, h('div', {class: 'ph-scr'},
@@ -1164,7 +1165,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     }
     var items = sbo.items || [];
     var F = {wait: function(x){ return !x.answer && !x.hidden; }, done: function(x){ return !!x.answer && !x.hidden; }, letter: function(x){ return x.kind === 'letter'; }, hidden: function(x){ return !!x.hidden; }, all: function(){ return true; }};
-    var LB = [['wait', '답변 대기'], ['done', '답변 완료'], ['letter', '편지'], ['hidden', '숨김'], ['all', '전체']];
+    var LB = [['wait', '답변 대기'], ['done', '답변 완료'], ['letter', '방명록'], ['hidden', '숨김'], ['all', '전체']];
     box.append(
       h('div', {class: 'tools'}, h('span', {class: 'ed-type', text: '받은 메시지'}), btn(sbo.busy ? '불러오는 중…' : '새로고침', '', function(){ sbList(b); }), btn('로그아웃', '', function(){ sbo.sess = null; sbo.items = null; try { localStorage.removeItem(RTKEY); } catch(e){} render(); })),
       h('div', {class: 'mng-tabs'}, LB.map(function(l){ return h('button', {type: 'button', 'aria-pressed': String(sbo.filter === l[0]), onclick: function(){ sbo.filter = l[0]; render(); }}, l[1] + ' ' + items.filter(F[l[0]]).length); })),
@@ -1172,18 +1173,18 @@ button{font:inherit;color:inherit;cursor:pointer}
     var shown = items.filter(F[sbo.filter]);
     if (sbo.items && !shown.length) box.append(h('p', {class: 'hint', text: '이 목록은 비어 있어요.'}));
     shown.forEach(function(it){
-      var ans = h('textarea', {class: 'ta', id: 'mi-' + it.id, rows: 3, value: sbo.drafts[it.id] != null ? sbo.drafts[it.id] : (it.answer || ''), placeholder: it.kind === 'letter' ? '답장 (보낸 사람만 볼 수 있어요)' : (it.is_private ? '답변 (질문한 사람만 볼 수 있어요)' : '답변 (메시지 창에 공개돼요)'), oninput: function(e){ sbo.drafts[it.id] = e.target.value; }});
+      var ans = h('textarea', {class: 'ta', id: 'mi-' + it.id, rows: 3, value: sbo.drafts[it.id] != null ? sbo.drafts[it.id] : (it.answer || ''), placeholder: it.is_private ? '답변 (보낸 사람만 볼 수 있어요)' : '답변 (메시지 창에 공개돼요)', oninput: function(e){ sbo.drafts[it.id] = e.target.value; }});
       box.append(h('div', {class: 'mitem'},
         h('div', {class: 'mh'},
-          h('span', {class: 'badge' + (it.kind === 'letter' ? ' line' : ''), text: it.kind === 'letter' ? '편지' : '질문'}),
-          it.kind === 'qna' ? h('span', {class: 'badge' + (it.is_private ? ' acc' : ' line'), text: it.is_private ? '비공개' : '공개'}) : null,
+          h('span', {class: 'badge' + (it.kind === 'letter' ? ' line' : ''), text: it.kind === 'letter' ? '방명록' : '질문'}),
+          h('span', {class: 'badge' + (it.is_private ? ' acc' : ' line'), text: it.is_private ? '비공개' : '공개'}),
           it.hidden ? h('span', {class: 'badge line', text: '숨김'}) : null,
           h('span', {text: (it.nick || '익명') + ' · ' + new Date(it.created_at).toLocaleString('ko-KR')})),
         h('div', {class: 'mq', text: it.body}),
         ans,
         h('div', {class: 'tools'},
           btn(it.answer ? '답변 고치기' : '답변 달기', 'primary', function(){ var v = ans.value.trim(); sbUpd(b, it, {answer: v || null, answered_at: v ? (it.answered_at || new Date().toISOString()) : null}); }),
-          it.kind === 'qna' ? btn(it.is_private ? '공개로 바꾸기' : '비공개로 바꾸기', '', function(){ sbUpd(b, it, {is_private: !it.is_private}); }) : null,
+          btn(it.is_private ? '공개로 바꾸기' : '비공개로 바꾸기', '', function(){ sbUpd(b, it, {is_private: !it.is_private}); }),
           btn(it.hidden ? '다시 보이기' : '숨기기', '', function(){ sbUpd(b, it, {hidden: !it.hidden}); }),
           armed('btn', '삭제', '정말 삭제', function(){ sbDel(b, it); }))));
     });
@@ -1525,10 +1526,10 @@ button{font:inherit;color:inherit;cursor:pointer}
         h('div', {class: 'tools'}, btn('연결 확인', '', function(){ var u = ibState(b); u.loaded = false; u.err = ''; if (!ibReady(b)){ render(); return; } ibLoad(b); }), ibStat ? h('span', {class: 'hint', style: ibu.err ? 'color:var(--accent)' : '', text: ibStat}) : null),
         h('div', {class: 'ed-sub', text: '창 꾸미기'}),
         h('label', {class: 'chk'}, h('input', {type: 'checkbox', id: id + '-q', checked: b.qna !== false, onchange: function(e){ b.qna = e.target.checked; structural(); }}), '질문함 쓰기 (답변하면 공개돼요)'),
-        h('label', {class: 'chk'}, h('input', {type: 'checkbox', id: id + '-l', checked: b.letter !== false, onchange: function(e){ b.letter = e.target.checked; structural(); }}), '익명 편지 쓰기 (주인만 읽어요)'),
-        h('div', {class: 'row2', style: 'grid-template-columns:minmax(0,1fr) minmax(0,1fr)'}, field('질문함 탭 이름', input(b, 'qtitle', id + '-qt', '질문함')), field('편지 탭 이름', input(b, 'ltitle', id + '-lt', '익명 편지'))),
+        h('label', {class: 'chk'}, h('input', {type: 'checkbox', id: id + '-l', checked: b.letter !== false, onchange: function(e){ b.letter = e.target.checked; structural(); }}), '익명 방명록 쓰기 (모두에게 보여요, 비공개 선택 가능)'),
+        h('div', {class: 'row2', style: 'grid-template-columns:minmax(0,1fr) minmax(0,1fr)'}, field('질문함 탭 이름', input(b, 'qtitle', id + '-qt', '질문함')), field('방명록 탭 이름', input(b, 'ltitle', id + '-lt', '익명 방명록'))),
         field('질문함 첫 인사 말풍선', textarea(b, 'intro', id + '-in', 2, '궁금한 걸 편하게 물어보세요. 답변한 질문은 여기에 공개돼요.')),
-        field('편지 첫 인사 말풍선', textarea(b, 'lintro', id + '-li', 2, '하고 싶은 말을 익명으로 남겨주세요. 편지는 저만 읽을 수 있어요.')),
+        field('방명록 첫 인사 말풍선', textarea(b, 'lintro', id + '-li', 2, '하고 싶은 말을 익명으로 남겨주세요. 모두가 볼 수 있어요.')),
         field('이름 옆 안내 (예: 보통 사흘 안에 답해요)', input(b, 'reply', id + '-rp', '')),
         h('div', {class: 'ed-sub', text: '받은 메시지 관리'}),
         inboxManager(b),
@@ -1623,8 +1624,10 @@ button{font:inherit;color:inherit;cursor:pointer}
   function ghFetch(path, opts){
     opts = opts || {};
     var headers = Object.assign({'Authorization': 'Bearer ' + gh.token, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}, opts.headers || {});
-    return fetch('https://api.github.com/repos/' + encodeURIComponent(gh.owner) + '/' + encodeURIComponent(gh.repo) + path, Object.assign({}, opts, {headers: headers}));
+    var sep = path.indexOf('?') >= 0 ? '&' : '?';
+    return fetch('https://api.github.com/repos/' + encodeURIComponent(gh.owner) + '/' + encodeURIComponent(gh.repo) + path + sep + '_=' + Date.now(), Object.assign({cache: 'no-store'}, opts, {headers: headers}));
   }
+  async function ghFail(r){ var t = ''; try { var j = JSON.parse(await r.text()); t = j && j.message ? j.message : ''; } catch(e){} return new Error(ghErr(r.status) + (t ? ' [GitHub: ' + t + ']' : '')); }
   function ghErr(st){
     if (st === 401) return '토큰이 맞지 않거나 만료됐어요. 새 토큰을 넣어주세요.';
     if (st === 403) return '이 토큰으로는 저장소에 쓸 수 없어요. 토큰 권한에서 Contents를 Read and write로 바꿔주세요.';
@@ -1655,11 +1658,12 @@ button{font:inherit;color:inherit;cursor:pointer}
     msg = 'GitHub에 올리는 중… (사진·음원이 많으면 조금 걸려요)'; updateBar();
     try {
       var meta = await ghFetch('/contents/' + gh.path + '?ref=' + encodeURIComponent(gh.branch)), sha;
-      if (meta.ok) sha = (await meta.json()).sha; else if (meta.status !== 404) throw new Error(ghErr(meta.status));
+      if (meta.ok){ var mt = await meta.text(), mj = null; try { mj = JSON.parse(mt); } catch(x){} if (!mj || !mj.sha) throw new Error('GitHub에서 파일 정보를 읽지 못했어요. 창을 새로고침한 뒤 다시 저장해주세요.'); sha = mj.sha; }
+      else if (meta.status !== 404) throw await ghFail(meta);
       var body = {message: '공지 수정 ' + new Date().toLocaleString('ko-KR'), content: await toB64(html), branch: gh.branch};
       if (sha) body.sha = sha;
       var r = await ghFetch('/contents/' + gh.path, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-      if (!r.ok) throw new Error(ghErr(r.status));
+      if (!r.ok) throw await ghFail(r);
       saved = next; state = clone(next); dirty = false; clearDraft(); saving = false;
       msg = 'GitHub에 올렸어요. 1~2분 뒤 사이트에 반영돼요.'; render();
     } catch(e){
