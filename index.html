@@ -303,7 +303,14 @@ button{font:inherit;color:inherit;cursor:pointer}
 .floaters{position:absolute;inset:0;z-index:0;pointer-events:none}
 .floaters.front{z-index:16}
 .fl{position:absolute;transform:translate(-50%,-50%) rotate(var(--rot,0deg));max-width:40vw}
-.fl img{display:block;width:100%;height:auto;animation:bob var(--dur,5s) ease-in-out infinite alternate;animation-delay:var(--dl,0s);filter:drop-shadow(0 8px 10px rgba(0,0,0,.5))}
+.fl img{display:block;width:100%;height:auto;animation:fl-float var(--dur,5s) ease-in-out infinite;animation-delay:var(--dl,0s);filter:drop-shadow(0 8px 10px rgba(0,0,0,.5));will-change:transform}
+.fl.m-swing img{transform-origin:50% 0;animation-name:fl-swing}
+.fl.m-bounce img{transform-origin:50% 100%;animation-name:fl-bounce;animation-timing-function:cubic-bezier(.3,0,.4,1)}
+.fl.m-wobble img{animation-name:fl-wobble}
+@keyframes fl-float{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(calc(var(--amp) * .5),calc(var(--amp) * -1)) rotate(var(--sw))}50%{transform:translate(0,calc(var(--amp) * -.35)) rotate(0)}75%{transform:translate(calc(var(--amp) * -.5),calc(var(--amp) * -.9)) rotate(calc(var(--sw) * -1))}100%{transform:translate(0,0) rotate(0)}}
+@keyframes fl-swing{0%,100%{transform:rotate(calc(var(--sw) * 2))}50%{transform:rotate(calc(var(--sw) * -2))}}
+@keyframes fl-bounce{0%,100%{transform:translateY(0) scale(1.06,.94)}12%{transform:translateY(0) scale(1,1)}45%{transform:translateY(calc(var(--amp) * -1.6)) scale(.96,1.05)}70%{transform:translateY(0) scale(1.04,.96)}85%{transform:translateY(calc(var(--amp) * -.35)) scale(1,1)}}
+@keyframes fl-wobble{0%,100%{transform:rotate(0) scale(1)}20%{transform:rotate(calc(var(--sw) * 1.6)) scale(1.04)}40%{transform:rotate(calc(var(--sw) * -1.4)) scale(.98)}60%{transform:rotate(calc(var(--sw) * 1)) scale(1.03)}80%{transform:rotate(calc(var(--sw) * -.6)) scale(1)}}
 .fl.still img{animation:none}
 .fl.drag{pointer-events:auto;cursor:grab;outline:1.5px dashed var(--accent);outline-offset:4px;touch-action:none}
 .fl.drag:active{cursor:grabbing}
@@ -1210,12 +1217,18 @@ button{font:inherit;color:inherit;cursor:pointer}
     if (!list.length) return null;
     return h('div', {class: 'floaters' + (front ? ' front' : ''), 'aria-hidden': 'true'}, list.map(floaterEl));
   }
+  var FLMV = [['float', '둥실'], ['swing', '대롱대롱'], ['bounce', '통통'], ['wobble', '흔들흔들']];
   function styleFloater(el, f){
-    el.style.left = f.x + '%'; el.style.top = f.top + 'px'; el.style.width = f.w + 'px';
+    el.style.left = f.dx != null ? 'calc(50% + ' + f.dx + 'px)' : f.x + '%';
+    el.style.top = f.top + 'px'; el.style.width = f.w + 'px';
     el.style.setProperty('--rot', (f.rot || 0) + 'deg');
-    el.style.setProperty('--dur', (f.speed ? (7.5 - f.speed * 1.5) : 5) + 's');
+    var sp = Math.max(0, Math.min(3, +f.speed || 0));
+    el.style.setProperty('--dur', [5, 5.2, 3.8, 2.6][sp] + 's');
+    el.style.setProperty('--amp', [0, 10, 18, 28][sp] + 'px');
+    el.style.setProperty('--sw', [0, 3, 6, 10][sp] + 'deg');
     el.style.setProperty('--dl', '-' + (hashCode(f.id) % 50) / 10 + 's');
-    el.classList.toggle('still', !f.speed);
+    FLMV.forEach(function(m){ el.classList.toggle('m-' + m[0], (f.mv || 'float') === m[0]); });
+    el.classList.toggle('still', !sp);
   }
   function floaterEl(f){
     var el = h('div', {class: 'fl' + (mode === 'edit' ? ' drag' : ''), 'data-fid': f.id}, h('img', {src: f.src, alt: '', draggable: 'false'}));
@@ -1224,8 +1237,8 @@ button{font:inherit;color:inherit;cursor:pointer}
       el.addEventListener('pointerdown', function(e){
         e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch(x){}
         var rect = document.getElementById('app').getBoundingClientRect();
-        function mv(ev){ f.x = Math.max(0, Math.min(100, (ev.clientX - rect.left) / rect.width * 100)); f.top = Math.max(0, Math.round(ev.clientY - rect.top)); el.style.left = f.x + '%'; el.style.top = f.top + 'px'; }
-        function up(){ el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); f.x = Math.round(f.x * 10) / 10; touch(); }
+        function mv(ev){ f.dx = Math.round(ev.clientX - (rect.left + rect.width / 2)); f.x = Math.round((ev.clientX - rect.left) / rect.width * 1000) / 10; f.top = Math.max(0, Math.round(ev.clientY - rect.top)); styleFloater(el, f); }
+        function up(){ el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); touch(); }
         el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
       });
     }
@@ -1417,7 +1430,8 @@ button{font:inherit;color:inherit;cursor:pointer}
         return h('label', {class: 'sl'}, label, h('input', {type: 'range', id: f.id + '-' + key, min: String(min), max: String(max), step: String(step || 1), value: String(f[key] || 0), oninput: function(e){ f[key] = +e.target.value; out.textContent = f[key] + (unit || ''); liveFloater(f); touch(); }}), out);
       }
       return h('div', {class: 'flt'}, h('img', {src: f.src, alt: ''}), h('div', {class: 'ed', style: 'gap:6px'},
-        slider('크기', 'w', 40, 520, 4, 'px'), slider('회전', 'rot', -45, 45, 1, '°'), slider('둥실', 'speed', 0, 3, 1, ''),
+        slider('크기', 'w', 40, 520, 4, 'px'), slider('회전', 'rot', -45, 45, 1, '°'), slider('움직임', 'speed', 0, 3, 1, ''),
+        h('div', {class: 'tools'}, FLMV.map(function(m){ return h('button', {class: 'add-mini', type: 'button', 'aria-pressed': String((f.mv || 'float') === m[0]), style: (f.mv || 'float') === m[0] ? 'border-style:solid;color:var(--ink);background:var(--field)' : '', onclick: function(){ f.mv = m[0]; if (!f.speed) f.speed = 2; structural(); }}, m[1]); })),
         h('div', {class: 'tools'},
           h('label', {class: 'chk'}, h('input', {type: 'checkbox', id: f.id + '-front', checked: !!f.front, onchange: function(e){ f.front = e.target.checked; structural(); }}), '글 위로 올리기'),
           armed('ib', '삭제', '정말 삭제', function(){ state.floaters.splice(fi, 1); structural(); }))));
@@ -1442,7 +1456,8 @@ button{font:inherit;color:inherit;cursor:pointer}
           pickImages(fs, 700, function(src){
             var left = state.floaters.length % 2 === 0;
             var top0 = -document.getElementById('app').getBoundingClientRect().top;
-            state.floaters.push({id: uid('f'), src: src, x: left ? 6 + Math.random() * 8 : 86 + Math.random() * 8, top: Math.round(top0 + window.innerHeight * (0.3 + Math.random() * 0.4)), w: 160, rot: 0, speed: 1, front: false});
+            var aw = document.getElementById('app').getBoundingClientRect().width, fx = left ? 6 + Math.random() * 8 : 86 + Math.random() * 8;
+            state.floaters.push({id: uid('f'), src: src, x: fx, dx: Math.round((fx / 100 - 0.5) * aw), mv: 'float', top: Math.round(top0 + window.innerHeight * (0.3 + Math.random() * 0.4)), w: 160, rot: 0, speed: 1, front: false});
           });
         }),
         h('div', {class: 'ed-sub', text: '화면 효과'}),
@@ -1661,6 +1676,7 @@ button{font:inherit;color:inherit;cursor:pointer}
       var text = await r.text(), m = text.match(/<script type="application\/json" id="state">([\s\S]*?)<\/script>/);
       if (!m) throw new Error('GitHub의 파일에서 공지 내용을 찾지 못했어요.');
       saved = migrate(JSON.parse(m[1])); state = clone(saved); dirty = false; draft = null; checkDraft();
+      if (fixFloaters(state)){ dirty = true; msg = '둥실 이미지가 창 크기와 상관없이 제자리에 있도록 위치를 바꿨어요. 위치를 확인하고 저장해주세요.'; }
       gh.ok = true; gh.info = '연결됐어요. ' + (fmtDate(saved.updatedAt) || '') + ' 내용을 불러왔어요.'; ghCfgSave();
     } catch(e){ gh.ok = false; gh.info = e && e.message ? e.message : '불러오지 못했어요. 인터넷 연결을 확인해주세요.'; }
     gh.busy = false; render();
@@ -1805,7 +1821,12 @@ button{font:inherit;color:inherit;cursor:pointer}
 
   var hash = (location.hash || '').slice(1);
   if (hash && state.sections.some(function(s){ return s.id === hash; })) cur = hash;
-  if (EDITOR){ canEdit = true; mode = 'edit'; checkDraft(); render(); if (gh.token && gh.owner && gh.repo) ghLoad(); return; }
+  function fixFloaters(st){
+    var aw = document.documentElement.clientWidth || 1440, n = 0;
+    (st.floaters || []).forEach(function(f){ if (f.dx == null){ f.dx = Math.round(((f.x == null ? 50 : f.x) / 100 - 0.5) * aw); n++; } });
+    return n;
+  }
+  if (EDITOR){ canEdit = true; mode = 'edit'; checkDraft(); if (fixFloaters(state)){ dirty = true; msg = '둥실 이미지가 창 크기와 상관없이 제자리에 있도록 위치를 바꿨어요. 위치를 확인하고 저장해주세요.'; } render(); if (gh.token && gh.owner && gh.repo) ghLoad(); return; }
   render();
   (async function(){
     try {
