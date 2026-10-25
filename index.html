@@ -559,6 +559,17 @@ button{font:inherit;color:inherit;cursor:pointer}
 .ph-send:disabled{opacity:.45;box-shadow:none}
 .ph-count{font-family:var(--f-mono);font-size:10px;color:var(--ph-mut);text-align:right;padding-right:4px}
 .ph-home{width:110px;height:4px;border-radius:3px;background:var(--ph-fg);opacity:.35;margin:4px auto 7px}
+.bimg{display:block;max-width:min(230px,100%);max-height:280px;border-radius:16px;object-fit:cover;cursor:zoom-in;box-shadow:0 2px 6px rgba(0,0,0,.15);background:var(--ph-ui)}
+.msg.out .bimg{margin-left:auto}
+.ph-att{flex:none;position:relative;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.6);color:var(--ph-fg);border:1px solid var(--ph-line);cursor:pointer}
+.phone[data-ph="night"] .ph-att{background:rgba(255,255,255,.06)}
+.ph-att input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.ph-att svg{width:19px;height:19px;fill:currentColor}
+.ph-att:focus-within{outline:2px solid var(--ph-out1);outline-offset:2px}
+.ph-prev{position:relative;justify-self:start;margin:2px 0 0 2px}
+.ph-prev img{display:block;height:64px;max-width:140px;object-fit:cover;border-radius:12px;box-shadow:0 0 0 2px #fff}
+.ph-prev button{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;border:0;background:#1c1b22;color:#fff;font-size:13px;line-height:1;padding:0}
+.mitem .mimgv{display:block;max-width:180px;max-height:180px;border-radius:6px;cursor:zoom-in;border:1px solid var(--line-p)}
 .phsw{display:flex;flex-wrap:wrap;gap:8px}
 .phsw button{border:2px solid var(--ink);width:34px;height:34px;border-radius:50%;padding:0}
 .phsw button[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:3px}
@@ -606,7 +617,15 @@ button{font:inherit;color:inherit;cursor:pointer}
   var FIG = "    .---.\n   / o o \\\n   \\  -  /\n    '-+-'\n   /--|--\\\n  /   |   \\\n      |\n     / \\\n    /   \\\n\n  [ NO IMAGE ]";
   var SKULL = "  .-\"\"\"-.\n /  _ _  \\\n |  o o  |\n  \\  ^  /\n   |||||";
 
-  var EDITOR = window.NOTICE_EDITOR || null, GKEY = 'mainnotice-gh';
+  var EDITOR = window.NOTICE_EDITOR || (function(){
+    try {
+      if (!/(^|&)edit(=|&|$)/.test(location.search.slice(1)) || !/\.github\.io$/i.test(location.hostname)) return null;
+      var owner = location.hostname.split('.')[0], seg = location.pathname.split('/').filter(Boolean)[0] || '';
+      if (/\.html?$/i.test(seg)) seg = '';
+      var m = document.createElement('meta'); m.name = 'robots'; m.content = 'noindex'; document.head.append(m);
+      return {owner: owner, repo: seg || owner + '.github.io', branch: 'main', path: 'index.html', online: true};
+    } catch(e){ return null; }
+  })(), GKEY = 'mainnotice-gh';
   var gh = {owner: '', repo: '', branch: 'main', path: 'index.html', token: '', remember: false, ok: false, busy: false, info: ''};
   if (EDITOR){
     Object.keys(EDITOR).forEach(function(k){ if (k in gh) gh[k] = EDITOR[k]; });
@@ -995,7 +1014,29 @@ button{font:inherit;color:inherit;cursor:pointer}
 
   /* ---------- 메시지 창 (질문함 · 익명 편지) ---------- */
   var SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.5 21 12 3 3.5v6.6l12 1.9-12 1.9z"/></svg>';
-  function ibState(b){ return ui.ib[b.id] = ui.ib[b.id] || {tab: b.qna !== false ? 'qna' : 'letter', pub: [], mine: [], loaded: false, loading: false, err: '', draft: '', nick: '', priv: false, sending: false, scroll: true, note: ''}; }
+  function ibState(b){ return ui.ib[b.id] = ui.ib[b.id] || {tab: b.qna !== false ? 'qna' : 'letter', pub: [], mine: [], loaded: false, loading: false, err: '', draft: '', nick: '', priv: false, sending: false, scroll: true, note: '', img: null, imgBlob: null}; }
+  var CLIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v8.6l3.6-3.6 3 3 4.4-4.4L19 13.6V7zm4 2.5a1.5 1.5 0 1 0 0 .01z"/></svg>';
+  function uuid(){ try { if (crypto.randomUUID) return crypto.randomUUID(); } catch(e){} var a = new Uint8Array(16); crypto.getRandomValues(a); a[6] = (a[6] & 15) | 64; a[8] = (a[8] & 63) | 128; var h2 = Array.from(a, function(x){ return (x + 256).toString(16).slice(1); }).join(''); return h2.slice(0,8) + '-' + h2.slice(8,12) + '-' + h2.slice(12,16) + '-' + h2.slice(16,20) + '-' + h2.slice(20); }
+  function dataToBlob(d){ var m = String(d).match(/^data:([^;,]+)(;base64)?,(.*)$/); var bin = atob(m[3]), a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], {type: m[1]}); }
+  function extOf(t){ return /gif/.test(t) ? 'gif' : /png/.test(t) ? 'png' : /jpe?g/.test(t) ? 'jpg' : 'webp'; }
+  function imgUrl(b, path){ return path ? sbBase(b) + '/storage/v1/object/public/qbox/' + path : ''; }
+  async function sbUpload(b, blob, path, bearer){
+    var k = String(b.key).trim(), headers = {'apikey': k, 'Content-Type': blob.type || 'image/webp', 'x-upsert': 'false', 'cache-control': 'max-age=31536000'};
+    if (bearer) headers['Authorization'] = 'Bearer ' + bearer; else if (/^eyJ/.test(k)) headers['Authorization'] = 'Bearer ' + k;
+    var r; try { r = await fetch(sbBase(b) + '/storage/v1/object/qbox/' + path, {method: 'POST', headers: headers, body: blob}); } catch(e){ throw new Error(sbMsg('Failed to fetch')); }
+    if (!r.ok){ var j = null; try { j = await r.json(); } catch(e){} throw new Error(sbMsg('upload: ' + ((j && (j.message || j.error)) || r.status))); }
+  }
+  async function makeMsgImage(file){
+    var d = await processImage(file, 1280), bl = dataToBlob(d);
+    if (bl.size > 2 * MB) throw new Error('사진이 2MB를 넘어요. 더 작은 사진을 골라주세요.');
+    return {data: d, blob: bl};
+  }
+  async function ibPick(b, file){
+    var u = ibState(b);
+    try { var r = await makeMsgImage(file); u.img = r.data; u.imgBlob = r.blob; u.note = ''; }
+    catch(e){ u.note = e.message || '사진을 열 수 없어요. JPG나 PNG로 골라주세요.'; }
+    render();
+  }
   function sbBase(b){ return String(b.url || '').trim().replace(/\/+$/, ''); }
   function keyDanger(k){
     k = String(k || '').trim();
@@ -1011,6 +1052,10 @@ button{font:inherit;color:inherit;cursor:pointer}
     if (/busy/.test(t)) return '지금 메시지가 몰려 있어요. 잠시 뒤 다시 보내주세요.';
     if (/bad length/.test(t)) return '내용은 1~1000자로 써주세요.';
     if (/Failed to fetch|NetworkError|Load failed|fetch/i.test(t)) return '메시지 서버에 연결하지 못했어요. 인터넷 연결을 확인하고 ↻를 눌러주세요.';
+    if (/p_img|upload: .*(Bucket not found|row-level security|bucket)/i.test(t)) return '사진 보내기 설정이 아직 안 돼 있어요. (qbox-update-images.sql을 실행했는지 확인해주세요.)';
+    if (/upload: .*(exceed|too large|413|Payload)/i.test(t)) return '사진이 너무 커요. 2MB 이하로 골라주세요.';
+    if (/upload: /.test(t)) return '사진을 올리지 못했어요. 잠시 뒤 다시 해주세요.';
+    if (/bad image/.test(t)) return '사진 정보가 이상해요. 다시 붙여주세요.';
     if (/qbox_/.test(t)) return '메시지 서버 설정이 아직 끝나지 않았어요. (설정 SQL을 실행했는지 확인해주세요.)';
     return t || '메시지 서버 응답이 이상해요. 잠시 뒤 다시 해주세요.';
   }
@@ -1037,10 +1082,13 @@ button{font:inherit;color:inherit;cursor:pointer}
   }
   async function ibSend(b, kind){
     var u = ibState(b), body = (u.draft || '').trim();
-    if (!body || u.sending || !ibReady(b)) return;
-    u.sending = true; u.note = ''; render();
+    if ((!body && !u.imgBlob) || u.sending || !ibReady(b)) return;
+    u.sending = true; u.note = u.imgBlob ? '사진을 올리는 중…' : ''; render();
     try {
-      var res = await sbRpc(b, 'qbox_ask', {p_kind: kind, p_body: body, p_nick: (u.nick || '').trim() || null, p_private: !!u.priv});
+      var args = {p_kind: kind, p_body: body, p_nick: (u.nick || '').trim() || null, p_private: !!u.priv};
+      if (u.imgBlob){ var path = 'u/' + uuid() + '.' + extOf(u.imgBlob.type); await sbUpload(b, u.imgBlob, path, null); args.p_img = path; }
+      var res = await sbRpc(b, 'qbox_ask', args);
+      u.img = null; u.imgBlob = null;
       var row = Array.isArray(res) ? res[0] : res;
       if (row && row.token){ var a = myToks(b); a.push({id: row.id, token: row.token}); saveToks(b, a); }
       u.note = kind === 'letter' ? (u.priv ? '비공개로 남겼어요. 주인만 읽을 수 있어요.' : '방명록에 남겼어요.') : (u.priv ? '비공개 질문을 보냈어요. 답변은 이 기기에서만 보여요.' : '질문을 보냈어요. 답변이 달리면 여기에 공개돼요.');
@@ -1076,7 +1124,10 @@ button{font:inherit;color:inherit;cursor:pointer}
       opt = opt || {};
       return h('div', {class: 'msg ' + side + (opt.cls ? ' ' + opt.cls : '')},
         side === 'in' ? av('mav') : null,
-        h('div', {class: 'bcol'}, opt.nick ? h('span', {class: 'bnick', text: opt.nick}) : null, h('div', {class: 'bb'}, rich(text)), opt.meta ? h('div', {class: 'bmeta'}, opt.meta) : null));
+        h('div', {class: 'bcol'}, opt.nick ? h('span', {class: 'bnick', text: opt.nick}) : null,
+          opt.img ? h('img', {class: 'bimg', src: opt.img, alt: '보낸 사진', loading: 'lazy', onclick: function(){ lightbox({src: opt.img}); }}) : null,
+          (text || !opt.img) ? h('div', {class: 'bb'}, rich(text)) : null,
+          opt.meta ? h('div', {class: 'bmeta'}, opt.meta) : null));
     }
     log.append(msg('in', u.tab === 'qna' ? (b.intro || '궁금한 걸 편하게 물어보세요. 답변한 질문은 여기에 공개돼요.') : (b.lintro || '하고 싶은 말을 익명으로 남겨주세요. 모두가 볼 수 있어요. 비공개로 남기면 저만 읽어요.')));
     if (!ready) log.append(h('div', {class: 'ph-sys', text: keyDanger(b.key) ? '비밀 키(secret/service_role)가 들어가 있어요. publishable 키로 바꿔주세요.' : (canEdit ? '편집에서 메시지 서버(Supabase) 주소와 키를 넣으면 열려요.' : '메시지 창을 준비하고 있어요.')}));
@@ -1100,24 +1151,27 @@ button{font:inherit;color:inherit;cursor:pointer}
         if (r.mine){
           meta.unshift(h('span', {text: '내가 보냄'}));
           if (q.is_private) meta.push(h('span', {class: 'lock', text: '■ 비공개'}));
-          if (!q.answer && q.kind !== 'letter') meta.push(h('span', {text: '답변 기다리는 중'}));
+          if (!q.answer && !q.aimg && q.kind !== 'letter') meta.push(h('span', {text: '답변 기다리는 중'}));
           meta.push(armedLink('지우기', '정말 지울까요?', function(){ ibDel(b, q.id); }));
         }
-        log.append(msg('out', q.body, {cls: [r.mine ? 'mine' : '', q.kind === 'letter' ? 'letter' : '', r.mine && !q.answer && q.kind !== 'letter' ? 'pending' : ''].join(' ').trim(), nick: q.nick || (r.mine ? '' : '익명'), meta: meta}));
-        if (q.answer) log.append(msg('in', q.answer, {cls: q.kind === 'letter' ? 'letter' : '', meta: [h('span', {text: q.answered_at ? hm(new Date(q.answered_at)) : ''}), r.mine && q.is_private ? h('span', {class: 'lock', text: '나에게만 보이는 답장'}) : null]}));
+        log.append(msg('out', q.body, {cls: [r.mine ? 'mine' : '', q.kind === 'letter' ? 'letter' : '', r.mine && !q.answer && !q.aimg && q.kind !== 'letter' ? 'pending' : ''].join(' ').trim(), nick: q.nick || (r.mine ? '' : '익명'), meta: meta, img: q.img ? imgUrl(b, q.img) : null}));
+        if (q.answer || q.aimg) log.append(msg('in', q.answer || '', {cls: q.kind === 'letter' ? 'letter' : '', img: q.aimg ? imgUrl(b, q.aimg) : null, meta: [h('span', {text: q.answered_at ? hm(new Date(q.answered_at)) : ''}), r.mine && q.is_private ? h('span', {class: 'lock', text: '나에게만 보이는 답장'}) : null]}));
       });
     }
     if (u.note) log.append(h('div', {class: 'ph-sys', text: u.note}));
     var cnt = h('div', {class: 'ph-count', text: (u.draft || '').length + ' / 1000'});
-    var send = h('button', {class: 'ph-send', type: 'submit', 'aria-label': '보내기', disabled: !(u.draft || '').trim() || u.sending || !ready}); send.innerHTML = SEND;
+    var send = h('button', {class: 'ph-send', type: 'submit', 'aria-label': '보내기', disabled: !((u.draft || '').trim() || u.imgBlob) || u.sending || !ready}); send.innerHTML = SEND;
+    var att = h('label', {class: 'ph-att', title: '사진 붙이기'}, h('input', {type: 'file', id: b.id + '-img', accept: 'image/*', 'aria-label': '사진 붙이기', disabled: !ready || u.sending, onchange: function(e){ var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) ibPick(b, f); }}));
+    att.insertAdjacentHTML('beforeend', CLIP);
     var ta = h('textarea', {id: b.id + '-ta', rows: 1, maxlength: '1000', value: u.draft || '', disabled: !ready, placeholder: u.tab === 'qna' ? '질문을 입력하세요' : '방명록을 남겨주세요', 'aria-label': '메시지 입력',
-      oninput: function(e){ u.draft = e.target.value; e.target.style.height = 'auto'; e.target.style.height = Math.min(120, e.target.scrollHeight) + 'px'; cnt.textContent = u.draft.length + ' / 1000'; send.disabled = !u.draft.trim() || u.sending; },
+      oninput: function(e){ u.draft = e.target.value; e.target.style.height = 'auto'; e.target.style.height = Math.min(120, e.target.scrollHeight) + 'px'; cnt.textContent = u.draft.length + ' / 1000'; send.disabled = !(u.draft.trim() || u.imgBlob) || u.sending; },
       onkeydown: function(e){ if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); ibSend(b, u.tab); } }});
     var form = h('form', {class: 'ph-comp', onsubmit: function(e){ e.preventDefault(); ibSend(b, u.tab); }},
       h('div', {class: 'ph-opts'},
         h('input', {type: 'text', id: b.id + '-nick', maxlength: '20', value: u.nick || '', placeholder: '닉네임 (안 써도 돼요)', 'aria-label': '닉네임', oninput: function(e){ u.nick = e.target.value; }}),
         h('label', {class: 'ph-lock'}, h('input', {type: 'checkbox', id: b.id + '-priv', checked: !!u.priv, onchange: function(e){ u.priv = e.target.checked; }}), u.tab === 'qna' ? '비공개로 보내기' : '비공개 (주인만)')),
-      h('div', {class: 'ph-row'}, ta, send), cnt);
+      u.img ? h('div', {class: 'ph-prev'}, h('img', {src: u.img, alt: '붙인 사진'}), h('button', {type: 'button', 'aria-label': '사진 빼기', onclick: function(){ u.img = null; u.imgBlob = null; render(); }}, '×')) : null,
+      h('div', {class: 'ph-row'}, att, ta, send), cnt);
     var tabs = (hasQ && hasL) ? h('div', {class: 'ph-tabs', role: 'tablist'}, [['qna', b.qtitle || '질문함'], ['letter', b.ltitle || '익명 방명록']].map(function(t){
       return h('button', {type: 'button', role: 'tab', 'aria-selected': String(u.tab === t[0]), onclick: function(){ u.tab = t[0]; u.note = ''; u.scroll = true; render(); }}, t[1]);
     })) : null;
@@ -1149,7 +1203,7 @@ button{font:inherit;color:inherit;cursor:pointer}
   }
   async function sbList(b){
     sbo.busy = true; render();
-    try { sbo.items = (await sbOwner(b, 'qbox?select=id,kind,body,nick,is_private,answer,answered_at,hidden,created_at&order=created_at.desc&limit=500')) || []; sbo.info = sbo.items.length ? '' : '받은 메시지가 없어요. 메시지가 있는데 안 보이면 설정 SQL의 주인 이메일을 확인해주세요.'; }
+    try { sbo.items = (await sbOwner(b, 'qbox?select=*&order=created_at.desc&limit=500')) || []; sbo.info = sbo.items.length ? '' : '받은 메시지가 없어요. 메시지가 있는데 안 보이면 설정 SQL의 주인 이메일을 확인해주세요.'; }
     catch(e){ sbo.info = e.message; }
     sbo.busy = false; render();
   }
@@ -1158,8 +1212,22 @@ button{font:inherit;color:inherit;cursor:pointer}
     catch(e){ sbo.info = e.message; }
     render();
   }
+  async function ownerBearer(b){ if (sbo.sess && Date.now() > sbo.sess.exp - 60000) await sbAuth(b, {refresh_token: sbo.sess.rt}, 'refresh_token'); return sbo.sess.at; }
+  async function sbRmFiles(b, paths){
+    paths = paths.filter(Boolean); if (!paths.length) return;
+    try { var at = await ownerBearer(b); await fetch(sbBase(b) + '/storage/v1/object/qbox', {method: 'DELETE', headers: {'apikey': String(b.key).trim(), 'Authorization': 'Bearer ' + at, 'Content-Type': 'application/json'}, body: JSON.stringify({prefixes: paths})}); } catch(e){}
+  }
+  async function sbAnsImg(b, it, file){
+    sbo.info = '사진을 올리는 중…'; render();
+    try {
+      var r = await makeMsgImage(file), path = 'a/' + uuid() + '.' + extOf(r.blob.type), old = it.aimg;
+      await sbUpload(b, r.blob, path, await ownerBearer(b));
+      await sbUpd(b, it, {aimg: path, answered_at: it.answered_at || new Date().toISOString()});
+      if (old) sbRmFiles(b, [old]);
+    } catch(e){ sbo.info = e.message; render(); }
+  }
   async function sbDel(b, it){
-    try { await sbOwner(b, 'qbox?id=eq.' + it.id, {method: 'DELETE', headers: {'Prefer': 'return=minimal'}}); sbo.items = sbo.items.filter(function(x){ return x !== it; }); sbo.info = '지웠어요.'; }
+    try { await sbOwner(b, 'qbox?id=eq.' + it.id, {method: 'DELETE', headers: {'Prefer': 'return=minimal'}}); sbRmFiles(b, [it.img, it.aimg]); sbo.items = sbo.items.filter(function(x){ return x !== it; }); sbo.info = '지웠어요.'; }
     catch(e){ sbo.info = e.message; }
     render();
   }
@@ -1200,8 +1268,13 @@ button{font:inherit;color:inherit;cursor:pointer}
           h('span', {class: 'badge' + (it.is_private ? ' acc' : ' line'), text: it.is_private ? '비공개' : '공개'}),
           it.hidden ? h('span', {class: 'badge line', text: '숨김'}) : null,
           h('span', {text: (it.nick || '익명') + ' · ' + new Date(it.created_at).toLocaleString('ko-KR')})),
-        h('div', {class: 'mq', text: it.body}),
+        it.body ? h('div', {class: 'mq', text: it.body}) : null,
+        it.img ? h('img', {class: 'mimgv', src: imgUrl(b, it.img), alt: '받은 사진', loading: 'lazy', onclick: function(){ lightbox({src: imgUrl(b, it.img)}); }}) : null,
         ans,
+        h('div', {class: 'tools'},
+          it.aimg ? h('img', {class: 'mimgv', style: 'max-width:90px;max-height:90px', src: imgUrl(b, it.aimg), alt: '답변 사진', onclick: function(){ lightbox({src: imgUrl(b, it.aimg)}); }}) : null,
+          fileBtn(it.aimg ? '답변 사진 바꾸기' : '답변에 사진 붙이기', 'mia-' + it.id, 'image/*', false, function(fs){ sbAnsImg(b, it, fs[0]); }),
+          it.aimg ? h('button', {class: 'add-mini', type: 'button', onclick: function(){ var old = it.aimg; sbUpd(b, it, {aimg: null}).then(function(){ sbRmFiles(b, [old]); }); }}, '사진 빼기') : null),
         h('div', {class: 'tools'},
           btn(it.answer ? '답변 고치기' : '답변 달기', 'primary', function(){ var v = ans.value.trim(); sbUpd(b, it, {answer: v || null, answered_at: v ? (it.answered_at || new Date().toISOString()) : null}); }),
           btn(it.is_private ? '공개로 바꾸기' : '비공개로 바꾸기', '', function(){ sbUpd(b, it, {is_private: !it.is_private}); }),
@@ -1564,7 +1637,7 @@ button{font:inherit;color:inherit;cursor:pointer}
         field('이름 옆 안내 (예: 보통 사흘 안에 답해요)', input(b, 'reply', id + '-rp', '')),
         h('div', {class: 'ed-sub', text: '받은 메시지 관리'}),
         inboxManager(b),
-        h('p', {class: 'hint', text: '미리보기를 누르면 방문자가 보는 메시지 창을 확인할 수 있어요.'})]);
+        h('p', {class: 'hint', text: '사진 보내기를 쓰려면 Supabase에서 qbox-update-images.sql을 한 번 실행해주세요. 미리보기를 누르면 방문자가 보는 메시지 창을 확인할 수 있어요.'})]);
     }
     if (b.type === 'dossier') add(body, editDossier(b));
     if (b.type === 'links'){
